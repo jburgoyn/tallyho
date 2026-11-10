@@ -4,6 +4,7 @@ import {
   listInvoices,
   listPlans,
   listProducts,
+  PayPalApiError,
   searchTransactions,
   TRANSACTION_SEARCH_MAX_DAYS,
   type Balances,
@@ -277,13 +278,27 @@ function balanceRows({ balances = [] }: Balances) {
 
 const TRANSACTION_WINDOW_MS = TRANSACTION_SEARCH_MAX_DAYS * DAY_MS;
 
+// Transaction Search and balances need the REST app's "Transaction search" feature. Without it PayPal
+// answers 403, and the dashboard carries on with invoices and the catalogue rather than failing.
+async function withoutReporting<T>(request: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await request;
+  } catch (e) {
+    if (e instanceof PayPalApiError && e.status === 403) {
+      console.warn(`[PayPal] ${e.path.split('?')[0]} is not permitted for this app; showing no data for it.`);
+      return fallback;
+    }
+    throw e;
+  }
+}
+
 export async function getDashboardData(asOf = new Date()) {
   const [products, plans, invoices, transactions, balances] = await Promise.all([
     listProducts(),
     listPlans(),
     listInvoices(),
-    searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf),
-    getBalances(),
+    withoutReporting(searchTransactions(new Date(asOf.getTime() - TRANSACTION_WINDOW_MS), asOf), []),
+    withoutReporting(getBalances(), {}),
   ]);
   const today = asOf.toISOString().slice(0, 10);
 

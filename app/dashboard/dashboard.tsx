@@ -10,15 +10,17 @@
 // Nothing tracks edits as they happen. Save reads the report from Studio with getState(), and
 // leaving a report compares Studio's state with the saved one there and then.
 
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AgStudioAiModule,
   enableStudioDevValidations,
+  type AgDefaultRegistry,
   type AgReportState,
   type AgStudioApi,
   type AgStudioMode,
+  type AgWidgetsConfig,
 } from 'ag-studio';
-import { AgStudio, AgStudioProvider } from 'ag-studio-react';
+import { AgStudio, AgStudioProvider, createWidgets } from 'ag-studio-react';
 import type { DashboardData } from '@/lib/dashboard-data';
 import { AppShell } from './components/app-shell';
 import {
@@ -45,7 +47,8 @@ import { pagesFor, pageTitlesFor } from './page-titles';
 import { ReportsSidebar } from './components/sidebar';
 import { DashboardSkeleton } from './components/skeleton';
 import * as reportState from './report-state';
-import { buildAi } from './studio/ai';
+import { ACTION_QUEUE_WIDGET, actionQueueWidget, type CashflowRegistry } from './studio/action-queue-widget';
+import { AI_TOOL_DISPLAY, buildAi, registerAiHost } from './studio/ai';
 import { buildStudioData, hasData } from './studio/data';
 import { agStudioPayPalTheme } from './studio/theme';
 import { useReports } from './use-reports';
@@ -97,7 +100,7 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
   const state = studioState ?? initialState;
   const studioData = useMemo(() => buildStudioData(data), [data]);
   // `ai` is read once, when Studio is created.
-  const ai = useMemo(() => (aiModels?.length ? buildAi(aiModels) : undefined), [aiModels]);
+  const ai = useMemo(() => (aiModels?.length ? buildAi(aiModels, data) : undefined), [aiModels, data]);
 
   // --- Driving Studio ---------------------------------------------------------------
   const load = (
@@ -128,6 +131,12 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
     updateState((s) => reportState.withFiltersPanelFor(next, s));
     setMode(next);
   };
+  // Studio only keeps panel state for the panels of the mode it is in, so the Compose and Data
+  // panels can only be folded once it has switched to edit mode. Its own effects run before this one.
+  useEffect(() => {
+    const api = apiRef.current;
+    if (api) api.setState(reportState.withFiltersPanelFor(mode, api.getState()));
+  }, [mode]);
 
   // --- Saving -----------------------------------------------------------------------
   const save = () => {
@@ -209,6 +218,19 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
       pageTitles: { ...report.pageTitles, [id]: title },
     }));
 
+  // What the agent may ask of the shell. Studio leaves pages to the host, so its agents cannot add
+  // one; ours does it through here. Re-registered every render so it always acts on the open report.
+  useEffect(() =>
+    registerAiHost({
+      createPage: (title) => {
+        if (!apiRef.current) return undefined;
+        const id = addPage();
+        renamePage(id, title);
+        return id;
+      },
+    }),
+  );
+
   const editing = mode === 'edit';
   const pages = pagesFor({ pageTitles: saved.pageTitles, state });
 
@@ -263,7 +285,16 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
               theme={agStudioPayPalTheme}
               layout={{ widgetBorderEnabled: true }}
               data={studioData}
+              // The rest of the dashboard is typed against Studio's default registry, so the custom
+              // widget's wider registry is narrowed here rather than threaded through every file.
+              widgets={(defaults) =>
+                createWidgets<CashflowRegistry>({
+                  additionalTypes: [actionQueueWidget],
+                  menu: [...defaults.menu, { label: 'Cash flow', widgetIds: [ACTION_QUEUE_WIDGET] }],
+                }) as unknown as AgWidgetsConfig<AgDefaultRegistry>
+              }
               ai={ai}
+              aiToolDisplay={AI_TOOL_DISPLAY}
               initialState={initialState}
               mode={mode}
               onApiReady={(event) => {

@@ -13,12 +13,23 @@ const durable = (state: AgReportState) =>
     pages: state.pages.map(({ id, widgets, widgetLayout, layout, filter }) => ({ id, widgets, widgetLayout, layout, filter })),
   });
 
-// The filters panel starts expanded in view mode, where it's the only panel, and collapsed in
-// edit mode, where Compose and Data need the room. Panel state isn't something Save compares.
-export const withFiltersPanelFor = (mode: AgStudioMode, state: AgReportState): AgReportState => ({
-  ...state,
-  panels: { ...state.panels, filters: { ...state.panels?.filters, collapsed: mode === 'edit' } },
-});
+// The filters panel starts expanded in view mode, where it's the only panel. Edit mode opens on the
+// AI Assistant with Filters, Compose and Data folded away, so the agent's chat and the dashboard it
+// is working on share the screen; Compose and Data are one click away when editing by hand.
+// Panel state isn't something Save compares.
+export const withFiltersPanelFor = (mode: AgStudioMode, state: AgReportState): AgReportState => {
+  const editing = mode === 'edit';
+  return {
+    ...state,
+    panels: {
+      ...state.panels,
+      filters: { ...state.panels?.filters, collapsed: editing },
+      edit: { ...state.panels?.edit, collapsed: editing },
+      data: { ...state.panels?.data, collapsed: editing },
+      ai: { ...state.panels?.ai, collapsed: false },
+    },
+  };
+};
 
 // Studio leaves page navigation to the host: these add, remove and select pages in state.
 export const selectPage = (state: AgReportState, pageId: string): AgReportState => ({ ...state, selectedPageId: pageId });

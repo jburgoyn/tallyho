@@ -1,91 +1,123 @@
-> [!TIP]
-> **PayPal AI Hackathon**
-> 
-> Win part of $69,750 in total prizes
-> 
-> Build What's Next with PayPal and AI is a global online hackathon inviting developers, designers, founders, students, and builders to create something new using PayPal and AI.
-> 
-> There are no prescribed problem statements and no set of tracks. Build an agent, an app, an automation, a new payment experience, a business tool, a social product, or something we haven't thought of yet.
-> 
-> https://paypalaihackathon.devpost.com
+# Cash-flow agent
 
-# PayPal SDK data pages
+An AI agent that finds money stuck in a PayPal account and gets it moving, with a person approving
+every action. Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com) on PayPal's
+REST APIs and AG Studio's agent framework.
 
-A Next.js app that reads PayPal sandbox data over the [PayPal REST API](https://developer.paypal.com/api/rest/) and shows it two ways:
+Small merchants and freelancers lose hours chasing late invoices, and often don't chase at all. The
+cash-flow agent reads the account's invoices, works out who is worth chasing first, drafts a message
+that fits how late each invoice is, and queues the actions. Nothing reaches PayPal until the merchant
+clicks Approve.
 
-- **Endpoint pages**: one [AG Grid](https://www.ag-grid.com/react-data-grid/) per PayPal endpoint the demo calls, showing what each returns.
-- **Dashboard** (`/dashboard`): an [AG Studio](https://www.ag-grid.com/studio/) report over all of that data, joined together, which you can edit and save in the browser.
+## What it does
 
-## Run locally
+- **Finds the problem.** Ask "where is my cash stuck?" and the agent queries live PayPal data for
+  overdue invoices, aging and unsent drafts, and reports each currency separately.
+- **Proposes actions.** Reminders for overdue invoices, sends for forgotten drafts, cancellations on
+  request. Each proposal carries the drafted email and the reason for it.
+- **Waits for approval.** Proposals land in an action queue on the dashboard, where the merchant can
+  edit the message, approve or dismiss each one. Approve calls PayPal's Invoicing API.
+- **Builds its own dashboard.** Ask for a collections page and the agent creates the page, then hands
+  the charts and grids to AG Studio's built-in agents.
 
-Requires Node.js 20.9 or later and a PayPal sandbox REST app ([developer.paypal.com](https://developer.paypal.com/dashboard/applications/sandbox)). The transactions and balances pages also need the app's **Transaction search** feature enabled.
+## How PayPal and AI are used
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| PayPal Invoicing API | `lib/paypal.ts` | Reads invoices; sends reminders, sends drafts and cancels invoices |
+| PayPal Catalog and Subscriptions APIs | `lib/paypal.ts` | Reads products and billing plans for the dashboard |
+| PayPal Transaction Search and Balances | `lib/paypal.ts` | Optional; feeds the Cash & payouts page |
+| AG Studio | `app/dashboard/` | The dashboard: grids, charts, filters, saved reports |
+| AG Studio Agent Framework | `app/dashboard/studio/ai.ts` | Our custom agent, running alongside Studio's five built-in agents |
+| Custom AG Studio widget | `app/dashboard/studio/action-queue-widget.tsx` | The approval queue |
+| OpenAI Responses API | `app/api/ai/responses/route.ts` | The model behind every agent, called through a server-side proxy |
+
+### The agent
+
+The cash-flow agent is a custom agent registered with AG Studio's harness as the one every
+conversation starts with. It has four kinds of tool:
+
+- Studio's own read tools (`view_schema`, `execute_query`, `view_page`) to get real figures.
+- `delegate_to`, to hand dashboard-building to Studio's lead agent.
+- `create_page`, our tool, because Studio leaves pages to the host app and its agents cannot add one.
+- `propose_invoice_actions`, our tool, which queues actions for approval.
+
+### Guard rails
+
+- The agent has no tool that calls PayPal. It can only propose; `app/api/paypal/actions` runs when a
+  person clicks Approve.
+- Every proposal is checked against the real invoice list. An invented invoice id, a reminder for a
+  paid invoice or a send for a non-draft is rejected back to the model to correct.
+- The customer, invoice number and amount shown to the approver come from PayPal's data, not from
+  the model's output.
+- `lib/paypal.ts` only talks to the PayPal sandbox host.
+
+## Run it locally
+
+Requires Node.js 20.9 or later, a PayPal sandbox REST app
+([developer.paypal.com](https://developer.paypal.com)), an AG Studio trial licence and an OpenAI API key.
 
 ```bash
 npm install
 cp env.example .env.local   # then fill in the values
+npm run seed                # optional: creates 12 sample invoices in the sandbox
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Next.js only loads the dotted `.env.local`; it is git-ignored, so credentials stay out of the repo.
+Open http://localhost:3000/dashboard, click **Edit** to open the AI Assistant, and try
+"Chase overdue invoices".
 
-Other scripts: `npm run build` (production build), `npm run start` (serve the build), `npm run lint`.
+`.env.local` is git-ignored, so credentials stay out of the repo.
 
-### AG Studio licence (optional)
+| Variable | Needed | Purpose |
+| --- | --- | --- |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_SECRET` | Yes | Sandbox REST app credentials |
+| `AG_STUDIO` | Yes | AG Studio licence key (a free trial key works) |
+| `AG_STUDIO_OPENAI_API_KEY` | Yes | OpenAI key for the agents; `OPENAI_API_KEY` is used if this is unset |
+| `OPENAI_MODELS` | No | Comma-separated model ids; the first is the default |
+| `DEMO_PASSWORD` | Hosted only | Gates every page and API route behind HTTP Basic auth |
 
-Set `AG_STUDIO` in `.env.local` to your AG Studio licence key. The dashboard passes it to `AgStudioProvider`.
+Notes:
 
-### AI assistant (optional)
+- `npm run seed` only writes to the sandbox, marks invoices as sent without emailing anyone, and
+  adds a new set each time it runs. `npm run seed -- --dry` prints what it would create.
+- The Cash & payouts page needs the REST app's **Transaction search** feature. Without it the app
+  still runs; that page is empty.
+- Other scripts: `npm run build`, `npm run start`, `npm run lint`.
 
-The AG Studio dashboard at `/dashboard` has an AI assistant backed by OpenAI. The key is taken from the first of these that is set; with neither, the assistant is hidden:
+## Deploy
 
-1. `AG_STUDIO_OPENAI_API_KEY`, specific to this app. Put it in `.env.local` to choose the key for this demo.
-2. `OPENAI_API_KEY`, the name OpenAI's own tools use. If you already export one (e.g. in `~/.zshrc`), the demo uses it with no setup, and spends against it.
+`render.yaml` describes a Render web service. Create a Blueprint from the repo, fill in the
+environment variables above, and set `DEMO_PASSWORD`.
 
-A separate name is needed because Next.js prefers variables already in the environment over `.env.local`, so a globally exported `OPENAI_API_KEY` can't be overridden per project. The server logs which variable it used (never the key) the first time the assistant is configured.
+Set `DEMO_PASSWORD` on any public deployment. The API routes spend your model key and act on your
+PayPal sandbox, and `proxy.ts` is the only thing standing in front of them.
 
-`OPENAI_MODELS` lists the model ids the assistant may use, comma-separated, first one the default (`gpt-5.4-mini` when unset); with two or more, the chat offers a model picker.
-
-The key never reaches the browser. Studio's adapter ([`openai-adapter.ts`](app/dashboard/studio/openai-adapter.ts), copied from the AG Studio docs) runs client-side and posts to this app's own [`/api/ai/responses`](app/api/ai/responses/route.ts), which adds the key, only allows the configured models, caps output tokens, and streams OpenAI's reply back.
-
-In production `.env.local` isn't deployed: set the variable in your host's environment (e.g. Vercel project settings, `docker run --env-file`, or a secrets manager), as with the PayPal credentials. The route has no auth or rate limiting, so don't deploy it publicly with a real key without adding one.
-
-## How it works
+## Layout
 
 ```
-lib/paypal.ts            Every PayPal call: OAuth token, paging, retries, response types
-lib/dashboard-data.ts    Turns those responses into the dashboard's related tables
-app/(endpoints)/         One page per endpoint, each rendering an AG Grid
-app/dashboard/           The AG Studio dashboard
-app/api/ai/responses/    Server-side proxy for the dashboard's AI assistant
+lib/paypal.ts                                  Every PayPal call, reads and writes
+lib/dashboard-data.ts                          PayPal responses -> the dashboard's related tables
+lib/actions.ts                                 Action types shared by browser and server
+app/api/paypal/actions/route.ts                Runs one approved action against PayPal
+app/api/ai/responses/route.ts                  Server-side proxy to the model
+app/dashboard/studio/ai.ts                     The cash-flow agent and its tools
+app/dashboard/studio/action-queue-widget.tsx   The approval queue widget
+app/dashboard/actions-store.ts                 The queue's state, kept in localStorage
+app/dashboard/studio/                          AG Studio data sources, theme and default report
+app/(endpoints)/                               One AG Grid page per PayPal endpoint
+scripts/seed-invoices.mjs                      Sample sandbox invoices
+proxy.ts                                       Access gate for hosted demos
 ```
 
-[`lib/paypal.ts`](lib/paypal.ts) calls the REST API with plain `fetch`, no SDK. It gets an OAuth access token with the client-credentials grant and caches it until just before it expires. It follows `page`/`total_pages` paging, and retries on 401, 429 and 5xx responses. Its types are hand-written for the fields this demo reads, in the API's own snake_case.
+## Credits
 
-Every page is a server component that calls `await connection()`, so it renders per request with live data instead of being prerendered at build time. PayPal credentials never leave the server.
+Built on PayPal's
+[hackathon-paypal-ag-grid-boilerplate](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate),
+which provided the PayPal REST client, the endpoint pages and the AG Studio dashboard shell. The
+cash-flow agent, its tools, the approval queue, the invoice actions, the seed script and the access
+gate were added for this hackathon.
 
-## Endpoint pages
+## Licence
 
-Each page in [`app/(endpoints)`](app/(endpoints)) calls one function in `lib/paypal.ts`, maps the response to flat rows, and passes them with plain column definitions to the shared [`DataGrid`](app/(endpoints)/data-grid.tsx). The page header shows the REST calls behind it.
-
-| Page | `lib/paypal.ts` function | REST calls |
-|---|---|---|
-| [`/products`](app/(endpoints)/products/page.tsx) | `listProducts()` | `GET /v1/catalogs/products`, then `GET /v1/catalogs/products/{id}` per product |
-| [`/plans`](app/(endpoints)/plans/page.tsx) | `listPlans()` | `GET /v1/billing/plans`, then `GET /v1/billing/plans/{id}` per plan |
-| [`/invoices`](app/(endpoints)/invoices/page.tsx) | `listInvoices()` | `GET /v2/invoicing/invoices`, then `GET /v2/invoicing/invoices/{id}` per invoice |
-| [`/transactions`](app/(endpoints)/transactions/page.tsx) | `searchTransactions(start, end)` | `GET /v1/reporting/transactions` |
-| [`/balances`](app/(endpoints)/balances/page.tsx) | `getBalances()` | `GET /v1/reporting/balances` |
-
-Things worth knowing about these endpoints:
-
-- **List endpoints return summaries.** Products have no type or category, plans no billing cycles, and invoices no line items, payments or refunds. So each record is fetched again in full, which is why these pages take a second or two.
-- **Billing plans keep their price in `billing_cycles`.** There is an optional `TRIAL` cycle, then the `REGULAR` cycle; `total_cycles: 0` means it bills until cancelled.
-- **Transaction Search covers at most 31 days per request** and rejects fractional seconds in dates. New activity can take up to three hours to appear. `fields=all` adds `payer_info` to each `transaction_info`. Event codes are [PayPal T-codes](https://developer.paypal.com/docs/transaction-search/transaction-event-codes/) (`T0001` = payout); status is `S` success, `P` pending, `D` denied, `V` reversed or `F` partially refunded.
-- **Amounts are decimal strings with a currency**, e.g. `{ "value": "2.99", "currency_code": "USD" }`. `amountOf()` turns them into numbers, and the grid formats money columns in each row's currency.
-
-### The grid
-
-Pages are server components, so the column definitions they pass to the grid must be plain data, with no functions. Money columns use the `type: 'money'` column type, defined in `data-grid.tsx`, which formats the value in the row's `currency`. Date columns use AG Grid's built-in `cellDataType: 'dateString'` or `'dateTimeString'`. Every column can be sorted and filtered, and the search box filters across all columns.
-
-## Dashboard
-
-[`/dashboard`](app/dashboard/page.tsx) fetches all five endpoints at once. [`lib/dashboard-data.ts`](lib/dashboard-data.ts) turns them into related tables: customers, invoices, invoice line items, invoice payments, products, plans, transactions, payouts and balances. AG Studio's data sources, relationships, theme, default report and AI assistant are configured in [`app/dashboard/studio`](app/dashboard/studio). Reports you create or edit are saved in the browser's localStorage.
+MIT. See [LICENSE](LICENSE).

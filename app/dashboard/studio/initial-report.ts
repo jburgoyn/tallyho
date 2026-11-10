@@ -211,6 +211,9 @@ const receivables: AgPageState = {
         style: { theme: { common: { legend: { enabled: true } } } },
       },
     },
+    // The cash-flow agent's proposals, awaiting approval (./action-queue-widget.tsx).
+    // A custom widget type, outside the default registry this file is typed against.
+    'action-queue': { type: 'action-queue', dataMapping: {}, format: {} } as never,
     'open-invoices': {
       type: 'grid',
       dataMapping: {
@@ -237,7 +240,8 @@ const receivables: AgPageState = {
     currency: at(18, 0, 6, 7),
     aging: at(0, 7, 16, 18),
     'overdue-share': at(16, 7, 8, 18),
-    'open-invoices': at(0, 25, 24, 20),
+    'open-invoices': at(0, 25, 14, 24),
+    'action-queue': at(14, 25, 10, 24),
   },
   filter: {
     page: [

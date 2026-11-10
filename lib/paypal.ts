@@ -182,6 +182,42 @@ export async function listInvoices(): Promise<Invoice[]> {
   return Promise.all(summaries.map((i) => get<Invoice>(`/v2/invoicing/invoices/${encodeURIComponent(i.id)}`)));
 }
 
+// --- Invoice actions ---------------------------------------------------------------
+// The only writes this app makes. Each is called from app/api/paypal/actions after a person has
+// approved the action in the dashboard; nothing here runs on the agent's say-so alone.
+
+// Writes are not retried on 5xx: a reminder that did go out must not be sent twice.
+async function post(path: string, body: unknown): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+    if (res.ok) return;
+    if (res.status === 401 && attempt === 1) {
+      cachedToken = undefined;
+      continue;
+    }
+    throw new PayPalApiError(res.status, path, await res.text());
+  }
+}
+
+const invoicePath = (id: string, action: string) => `/v2/invoicing/invoices/${encodeURIComponent(id)}/${action}`;
+
+/** Email the recipient a payment reminder for a sent, unpaid invoice. */
+export const remindInvoice = (id: string, subject: string, note: string) =>
+  post(invoicePath(id, 'remind'), { subject, note, send_to_invoicer: false });
+
+/** Send a draft invoice to its recipient. */
+export const sendInvoice = (id: string, subject: string, note: string) =>
+  post(invoicePath(id, 'send'), { subject, note, send_to_recipient: true, send_to_invoicer: false });
+
+/** Cancel a sent invoice and tell the recipient why. */
+export const cancelInvoice = (id: string, subject: string, note: string) =>
+  post(invoicePath(id, 'cancel'), { subject, note, send_to_recipient: true, send_to_invoicer: false });
+
 // --- Transaction Search & balances -------------------------------------------------
 
 export type Transaction = {

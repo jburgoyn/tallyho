@@ -1,0 +1,25 @@
+# Render Blueprint: one Node web service running the Next.js app.
+# Secrets are entered in the Render dashboard (sync: false), never committed.
+services:
+  - type: web
+    name: cashflow-agent
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_SECRET
+        sync: false
+      - key: AG_STUDIO
+        sync: false
+      - key: AG_STUDIO_OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODELS
+        sync: false
+      # Required on a public deployment: gates every page and API route (see proxy.ts).
+      - key: DEMO_PASSWORD
+        sync: false
