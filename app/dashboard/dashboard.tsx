@@ -11,6 +11,7 @@
 // leaving a report compares Studio's state with the saved one there and then.
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AgStudioAiModule,
   enableStudioDevValidations,
@@ -48,6 +49,9 @@ import { ReportsSidebar } from './components/sidebar';
 import { DashboardSkeleton } from './components/skeleton';
 import * as reportState from './report-state';
 import { ACTION_QUEUE_WIDGET, actionQueueWidget, type CashflowRegistry } from './studio/action-queue-widget';
+import { BRIEFING_WIDGET, briefingWidget } from './studio/briefing-widget';
+import { onActionCompleted } from './actions-store';
+import { publishFacts } from './facts-store';
 import { AI_TOOL_DISPLAY, buildAi, registerAiHost } from './studio/ai';
 import { buildStudioData, hasData } from './studio/data';
 import { agStudioPayPalTheme } from './studio/theme';
@@ -228,8 +232,19 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
         renamePage(id, title);
         return id;
       },
+      openAgent: () => {
+        if (mode !== 'edit') changeMode('edit');
+      },
     }),
   );
+
+  // The briefing widget and the agent's tools read the account's data from here, outside React.
+  useEffect(() => publishFacts(data), [data]);
+
+  // An approved action changes the PayPal data (a draft becomes sent, a payment lands), so reload it;
+  // the charts, the briefing and the agent's checks then all see the result.
+  const router = useRouter();
+  useEffect(() => onActionCompleted(() => router.refresh()), [router]);
 
   const editing = mode === 'edit';
   const pages = pagesFor({ pageTitles: saved.pageTitles, state });
@@ -289,8 +304,8 @@ function ReportsDashboard({ data, licenseKey, aiModels }: DashboardProps) {
               // widget's wider registry is narrowed here rather than threaded through every file.
               widgets={(defaults) =>
                 createWidgets<CashflowRegistry>({
-                  additionalTypes: [actionQueueWidget],
-                  menu: [...defaults.menu, { label: 'Cash flow', widgetIds: [ACTION_QUEUE_WIDGET] }],
+                  additionalTypes: [briefingWidget, actionQueueWidget],
+                  menu: [...defaults.menu, { label: 'Cash flow', widgetIds: [BRIEFING_WIDGET, ACTION_QUEUE_WIDGET] }],
                 }) as unknown as AgWidgetsConfig<AgDefaultRegistry>
               }
               ai={ai}

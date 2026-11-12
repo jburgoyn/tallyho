@@ -17,8 +17,33 @@ const CALENDAR_ID = 'calendar';
 // [id, name, format, hide?]
 type FieldSpec = [id: string, name: string, format: AgFormat, hide?: boolean];
 
-const fields = (specs: FieldSpec[]): AgFieldDefinition[] =>
-  specs.map(([id, name, format, hide]) => ({ id, name, format, ...(hide && { hide }) }));
+// `currency` is the one currency every money field of the table is in, when there is one: those
+// fields then show its symbol ($32,090.00). Without it they stay plain numbers, because a table that
+// mixes currencies must not be labelled with any single one.
+const fields = (specs: FieldSpec[], currency?: string): AgFieldDefinition[] =>
+  specs.map(([id, name, format, hide]) => ({
+    id,
+    name,
+    format,
+    ...(hide && { hide }),
+    ...(format === 'currencyFormat' && currency && { formatOptions: { format: moneyFormat(currency) } }),
+  }));
+
+const moneyFormats = new Map<string, Intl.NumberFormat>();
+function moneyFormat(currency: string) {
+  let format = moneyFormats.get(currency);
+  if (!format) {
+    format = new Intl.NumberFormat('en-US', { style: 'currency', currency });
+    moneyFormats.set(currency, format);
+  }
+  return format;
+}
+
+// The single currency these rows share, or undefined when they are empty or mixed.
+function soleCurrency(rows: { currency: string | null | undefined }[]) {
+  const currencies = new Set(rows.map((r) => r.currency).filter((c): c is string => !!c));
+  return currencies.size === 1 ? [...currencies][0] : undefined;
+}
 
 // Foreign key 'table.field' -> primary key 'table.field'.
 const manyToOne = (id: string, source: string, target: string): AgRelationDefinition => {
@@ -66,6 +91,8 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
     .filter((d): d is string => !!d)
     .sort();
   const today = data.asOf.slice(0, 10);
+  // Invoice lines and payments carry no currency of their own; they are in their invoice's.
+  const invoiceCurrency = soleCurrency(data.invoices);
 
   return {
     description:
@@ -111,7 +138,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['agingBucket', 'Aging Bucket', 'textFormat'],
           ['daysToPay', 'Days to Pay', 'integerFormat'],
           ['taxTotal', 'Tax', 'currencyFormat'],
-        ]),
+        ], invoiceCurrency),
       },
       {
         id: 'invoiceItems',
@@ -129,7 +156,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['discount', 'Line Discount', 'currencyFormat'],
           ['tax', 'Line Tax', 'currencyFormat'],
           ['lineTotal', 'Line Total', 'currencyFormat'],
-        ]),
+        ], invoiceCurrency),
       },
       {
         id: 'invoicePayments',
@@ -144,7 +171,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['date', 'Payment Date', 'dateFormat'],
           ['amount', 'Payment Amount', 'currencyFormat'],
           ['signedAmount', 'Net Cash', 'currencyFormat'],
-        ]),
+        ], invoiceCurrency),
       },
       {
         id: 'products',
@@ -173,7 +200,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['monthlyPrice', 'Monthly Price', 'currencyFormat'],
           ['trialDays', 'Trial Days', 'integerFormat'],
           ['setupFee', 'Setup Fee', 'currencyFormat'],
-        ]),
+        ], 'USD'),
       },
       {
         id: 'transactions',
@@ -192,7 +219,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['endingBalance', 'Ending Balance', 'currencyFormat'],
           ['counterparty', 'Counterparty', 'textFormat'],
           ['note', 'Transaction Note', 'textFormat'],
-        ]),
+        ], soleCurrency(data.transactions)),
       },
       {
         id: 'payouts',
@@ -207,7 +234,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['amount', 'Payout Amount', 'currencyFormat'],
           ['fee', 'Payout Fee', 'currencyFormat'],
           ['note', 'Payout Note', 'textFormat'],
-        ]),
+        ], 'USD'),
       },
       {
         id: 'balances',
@@ -218,7 +245,7 @@ export function buildStudioData(data: DashboardData): AgDataSourcesDefinition {
           ['total', 'Total Balance', 'currencyFormat'],
           ['available', 'Available Balance', 'currencyFormat'],
           ['withheld', 'Withheld Balance', 'currencyFormat'],
-        ]),
+        ], soleCurrency(data.balances)),
       },
     ],
     relationships: [

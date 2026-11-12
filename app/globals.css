@@ -11,36 +11,38 @@ body {
 }
 
 /*
- * PayPal design tokens: the single source of truth for the dashboard shell (through the
+ * Design tokens (the pp- prefix is inherited from the starter): the single source of truth for the dashboard shell (through the
  * Tailwind colours below, e.g. bg-pp-blue), for AG Studio (app/dashboard/studio/theme.ts)
  * and for AG Grid (app/(endpoints)/data-grid.tsx), whose themes reference these variables directly.
  */
 :root {
-  --pp-navy: #001c64;
-  --pp-blue: #0070e0;
-  --pp-blue-dark: #003087;
-  --pp-sky: #009cde;
-  --pp-highlight: #e6f0fc;
-  --pp-canvas: #f5f7fa;
+  /* Tallyho's palette: deep forest for headings, emerald for actions. The names keep the starter's
+     roles: navy = darkest brand colour, blue = primary action, sky = light accent. */
+  --pp-navy: #0d2b22;
+  --pp-blue: #0a7f55;
+  --pp-blue-dark: #0a5c40;
+  --pp-sky: #2bb673;
+  --pp-highlight: #e3f4eb;
+  --pp-canvas: #f4f7f5;
   --pp-surface: #ffffff;
-  --pp-border: #dbe1e8;
-  --pp-gridline: #e9edf2;
-  --pp-ink: #001435;
-  --pp-muted: #545d68;
-  --pp-success: #00875a;
+  --pp-border: #d9e3dd;
+  --pp-gridline: #e7eeea;
+  --pp-ink: #0b1d17;
+  --pp-muted: #54625b;
+  --pp-success: #0a7f55;
   --pp-warning: #b45309;
   --pp-danger: #c4122f;
-  --pp-font: "PayPal Open", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --pp-font: var(--font-geist-sans), "Helvetica Neue", Helvetica, Arial, sans-serif;
 
-  /* Chart series, PayPal blue and navy first. */
-  --pp-chart-1: #0070e0;
-  --pp-chart-2: #001c64;
-  --pp-chart-3: #00a8a8;
-  --pp-chart-4: #f5a623;
+  /* Chart series, brand emerald and forest first. */
+  --pp-chart-1: #0a7f55;
+  --pp-chart-2: #0d2b22;
+  --pp-chart-3: #f2a33a;
+  --pp-chart-4: #3b7dd8;
   --pp-chart-5: #7b61ff;
   --pp-chart-6: #e8615a;
-  --pp-chart-7: #60cdff;
-  --pp-chart-8: #2e9e6a;
+  --pp-chart-7: #6fd0a3;
+  --pp-chart-8: #1d6f8c;
   --pp-chart-9: #b47cd8;
   --pp-chart-10: #8a94a6;
 }

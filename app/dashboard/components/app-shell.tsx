@@ -1,49 +1,28 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { BellIcon, HelpIcon } from './ui/icons';
-import { AgStudioLogo } from './ui/logo';
+import Link from 'next/link';
+import { BRAND, BrandLockup } from '@/app/components/brand';
 
-// The app frame, laid out like the PayPal Developer Dashboard: a white top bar, a left sidebar
-// and a light canvas. Shared by the dashboard, its loading skeleton and its error page.
-
-function PayPalWordmark({ className = '' }: { className?: string }) {
-  return (
-    <span className={`font-bold italic tracking-tight ${className}`}>
-      <span className="text-pp-blue-dark">Pay</span>
-      <span className="text-pp-sky">Pal</span>
-    </span>
-  );
-}
-
-function BrandLockup() {
-  return (
-    <div className="flex items-center gap-3">
-      <AgStudioLogo className="-ml-3 h-12 w-auto" />
-      <span className="h-6 w-px bg-pp-border" aria-hidden />
-      <span className="flex items-baseline gap-1 text-xs text-pp-muted">
-        powered by <PayPalWordmark className="text-base" /> APIs
-      </span>
-    </div>
-  );
-}
+// The app frame: a white top bar, a left sidebar and a light canvas. Shared by the dashboard, its
+// loading skeleton and its error page.
 
 function TopBar() {
   return (
     <header className="flex h-16 shrink-0 items-center gap-6 border-b border-pp-border bg-white px-6">
-      <BrandLockup />
-      <div className="ml-auto flex items-center gap-1 text-pp-navy">
-        <span className="inline-flex size-9 items-center justify-center rounded-full" title="Help">
-          <HelpIcon />
-        </span>
-        <span className="inline-flex size-9 items-center justify-center rounded-full" title="Notifications">
-          <BellIcon />
-        </span>
-        <span className="ml-2 flex items-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-full bg-pp-navy text-sm font-semibold text-white">
-            AG
+      <Link href="/" aria-label={`${BRAND.name} home`} className="rounded focus-visible:outline-2 focus-visible:outline-pp-blue">
+        <BrandLockup />
+      </Link>
+      <span className="hidden text-xs text-pp-muted md:inline">Built on PayPal REST APIs and AG Studio</span>
+      <div className="ml-auto flex items-center gap-4 text-sm">
+        <Link href="/#how-it-works" className="font-semibold text-pp-blue hover:underline">
+          How it works
+        </Link>
+        <span className="flex items-center gap-2 text-pp-navy" title="Signed in to the PayPal sandbox account in .env.local">
+          <span className="flex size-9 items-center justify-center rounded-full bg-pp-navy text-xs font-semibold text-white">
+            PS
           </span>
-          <span className="hidden text-sm font-semibold sm:inline">Demo merchant</span>
+          <span className="hidden font-semibold sm:inline">PayPal sandbox</span>
         </span>
       </div>
     </header>

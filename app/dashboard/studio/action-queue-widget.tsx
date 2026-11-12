@@ -6,7 +6,8 @@
 
 import { useState, useSyncExternalStore } from 'react';
 import type { AgBaseWidgetDefinition, AgDefaultRegistry, AgDefaultWidgetDefinition } from 'ag-studio';
-import { ACTION_LABEL } from '@/lib/actions';
+import { ACTION_LABEL, EMAIL_ACTIONS } from '@/lib/actions';
+import type { briefingWidget } from './briefing-widget';
 import {
   approve,
   clearFinished,
@@ -30,13 +31,25 @@ const money = (amount: number, currency: string) => {
 };
 
 const STATUS: Partial<Record<ActionStatus, { text: string; className: string }>> = {
-  running: { text: 'Sending…', className: 'text-pp-muted' },
+  running: { text: 'Working…', className: 'text-pp-muted' },
   done: { text: 'Done', className: 'text-pp-success' },
   failed: { text: 'Failed', className: 'text-pp-danger' },
   dismissed: { text: 'Dismissed', className: 'text-pp-muted' },
 };
 
+// How hard a reminder pushes, which follows how late the invoice is (the agent is told the same bands).
+function toneOf(action: QueuedAction): { text: string; className: string } | undefined {
+  if (action.type !== 'remind') return undefined;
+  if (action.daysOverdue > 60) return { text: 'Firm', className: 'bg-red-50 text-pp-danger' };
+  if (action.daysOverdue > 30) return { text: 'Direct', className: 'bg-amber-50 text-pp-warning' };
+  return { text: 'Nudge', className: 'bg-emerald-50 text-pp-success' };
+}
+
+const METHOD_LABEL = (method: string) => method[0] + method.slice(1).toLowerCase().replaceAll('_', ' ');
+
 function ActionCard({ action }: { action: QueuedAction }) {
+  const emails = EMAIL_ACTIONS.has(action.type);
+  const tone = toneOf(action);
   const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(action.subject);
   const [note, setNote] = useState(action.note);
@@ -49,6 +62,9 @@ function ActionCard({ action }: { action: QueuedAction }) {
         <span className="whitespace-nowrap rounded bg-pp-highlight px-1.5 py-0.5 text-xs font-semibold text-pp-blue-dark">
           {ACTION_LABEL[action.type]}
         </span>
+        {tone && (
+          <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${tone.className}`}>{tone.text}</span>
+        )}
         <span className="min-w-0 truncate text-sm font-semibold text-pp-ink">{action.customer}</span>
         <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-pp-ink">
           {money(action.amount, action.currency)}
@@ -58,7 +74,15 @@ function ActionCard({ action }: { action: QueuedAction }) {
         Invoice {action.invoiceNumber} · {action.reason}
       </p>
 
-      {editing ? (
+      {!emails ? (
+        <div className="mt-2 rounded bg-pp-canvas px-2 py-1.5 text-sm text-pp-ink">
+          <p className="font-semibold">
+            Mark {money(action.amount, action.currency)} as received
+            {action.payment && ` by ${METHOD_LABEL(action.payment.method).toLowerCase()}`}
+          </p>
+          {action.note && <p className="mt-0.5 whitespace-pre-wrap text-pp-muted">{action.note}</p>}
+        </div>
+      ) : editing ? (
         <div className="mt-2 flex flex-col gap-2">
           <input
             className="rounded border border-pp-border px-2 py-1 text-sm"
@@ -86,7 +110,7 @@ function ActionCard({ action }: { action: QueuedAction }) {
         {status && <span className={`text-xs font-semibold ${status.className}`}>{status.text}</span>}
         {open && (
           <div className="ml-auto flex flex-wrap justify-end gap-2">
-            {editing ? (
+            {!emails ? null : editing ? (
               <button
                 type="button"
                 className="rounded-full border border-pp-border px-3 py-1 text-xs font-semibold text-pp-ink"
@@ -190,12 +214,12 @@ export const actionQueueWidget: AgBaseWidgetDefinition<typeof ACTION_QUEUE_WIDGE
   ai: {
     label: 'Action queue',
     description:
-      'Lists the PayPal actions the cash-flow agent has proposed (invoice reminders, sends and cancellations) so a person can edit, approve or dismiss each one.',
+      'Lists the PayPal actions the cash-flow agent has proposed (invoice reminders, sends, cancellations and recorded payments) so a person can edit, approve or dismiss each one.',
     usage: 'Add one to any page where the user reviews proposed actions. It takes no data mapping.',
   },
 };
 
 /** Studio's own widgets plus the action queue, so widget ids type-check wherever they are listed. */
 export type CashflowRegistry = Omit<AgDefaultRegistry, 'widgets'> & {
-  widgets: readonly (AgDefaultWidgetDefinition | typeof actionQueueWidget)[];
+  widgets: readonly (AgDefaultWidgetDefinition | typeof actionQueueWidget | typeof briefingWidget)[];
 };

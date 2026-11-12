@@ -218,6 +218,18 @@ export const sendInvoice = (id: string, subject: string, note: string) =>
 export const cancelInvoice = (id: string, subject: string, note: string) =>
   post(invoicePath(id, 'cancel'), { subject, note, send_to_recipient: true, send_to_invoicer: false });
 
+/** Record a payment the customer made outside PayPal (bank transfer, cheque...) against an invoice. */
+export const recordInvoicePayment = (
+  id: string,
+  payment: { amount: number; currency: string; method: string; note: string },
+) =>
+  post(invoicePath(id, 'payments'), {
+    method: payment.method,
+    payment_date: new Date().toISOString().slice(0, 10),
+    amount: { currency_code: payment.currency, value: payment.amount.toFixed(2) },
+    note: payment.note,
+  });
+
 // --- Transaction Search & balances -------------------------------------------------
 
 export type Transaction = {

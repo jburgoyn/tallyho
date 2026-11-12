@@ -1,20 +1,25 @@
-# Cash-flow agent
+# Tallyho
 
-An AI agent that finds money stuck in a PayPal account and gets it moving, with a person approving
-every action. Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com) on PayPal's
+The cash-flow agent that chases what you are owed: an AI agent that finds money stuck in a PayPal account and
+gets it moving, with a person approving every action. Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com) on PayPal's
 REST APIs and AG Studio's agent framework.
 
-Small merchants and freelancers lose hours chasing late invoices, and often don't chase at all. The
-cash-flow agent reads the account's invoices, works out who is worth chasing first, drafts a message
+Small merchants and freelancers lose hours chasing late invoices, and often don't chase at all. Tallyho's
+agent reads the account's invoices, works out who is worth chasing first, drafts a message
 that fits how late each invoice is, and queues the actions. Nothing reaches PayPal until the merchant
 clicks Approve.
 
 ## What it does
 
+- **Opens with a briefing.** The dashboard leads with what matters today: how much is overdue, who
+  owes it, what never went out, and one-click requests to the agent.
 - **Finds the problem.** Ask "where is my cash stuck?" and the agent queries live PayPal data for
   overdue invoices, aging and unsent drafts, and reports each currency separately.
 - **Proposes actions.** Reminders for overdue invoices, sends for forgotten drafts, cancellations on
-  request. Each proposal carries the drafted email and the reason for it.
+  request, and recording payments that arrived outside PayPal. Each proposal carries the drafted
+  email, a tone (nudge, direct or firm) and the reason for it.
+- **Closes the loop.** When an approved action lands, the dashboard reloads from PayPal, so the
+  overdue total, the charts and the briefing move straight away.
 - **Waits for approval.** Proposals land in an action queue on the dashboard, where the merchant can
   edit the message, approve or dismiss each one. Approve calls PayPal's Invoicing API.
 - **Builds its own dashboard.** Ask for a collections page and the agent creates the page, then hands
@@ -24,12 +29,12 @@ clicks Approve.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| PayPal Invoicing API | `lib/paypal.ts` | Reads invoices; sends reminders, sends drafts and cancels invoices |
+| PayPal Invoicing API | `lib/paypal.ts` | Reads invoices; sends reminders, sends drafts, cancels invoices and records payments |
 | PayPal Catalog and Subscriptions APIs | `lib/paypal.ts` | Reads products and billing plans for the dashboard |
 | PayPal Transaction Search and Balances | `lib/paypal.ts` | Optional; feeds the Cash & payouts page |
 | AG Studio | `app/dashboard/` | The dashboard: grids, charts, filters, saved reports |
 | AG Studio Agent Framework | `app/dashboard/studio/ai.ts` | Our custom agent, running alongside Studio's five built-in agents |
-| Custom AG Studio widget | `app/dashboard/studio/action-queue-widget.tsx` | The approval queue |
+| Custom AG Studio widgets | `app/dashboard/studio/action-queue-widget.tsx`, `briefing-widget.tsx` | The approval queue, and the briefing whose buttons start the agent |
 | OpenAI Responses API | `app/api/ai/responses/route.ts` | The model behind every agent, called through a server-side proxy |
 
 ### The agent
@@ -64,8 +69,8 @@ npm run seed                # optional: creates 12 sample invoices in the sandbo
 npm run dev
 ```
 
-Open http://localhost:3000/dashboard, click **Edit** to open the AI Assistant, and try
-"Chase overdue invoices".
+Open http://localhost:3000/dashboard and click **Chase overdue invoices** in the briefing, or
+**Ask the agent** to open the AI Assistant.
 
 `.env.local` is git-ignored, so credentials stay out of the repo.
 
@@ -103,8 +108,13 @@ app/api/paypal/actions/route.ts                Runs one approved action against 
 app/api/ai/responses/route.ts                  Server-side proxy to the model
 app/dashboard/studio/ai.ts                     The cash-flow agent and its tools
 app/dashboard/studio/action-queue-widget.tsx   The approval queue widget
+app/dashboard/studio/briefing-widget.tsx       The briefing widget
+app/dashboard/facts-store.ts                   Latest PayPal data, for the agent's tools and the briefing
 app/dashboard/actions-store.ts                 The queue's state, kept in localStorage
 app/dashboard/studio/                          AG Studio data sources, theme and default report
+app/page.tsx                                   Landing page
+app/components/brand.tsx                       Product name and logo, in one place
+app/globals.css                                Colour palette and fonts for the shell, AG Studio and AG Grid
 app/(endpoints)/                               One AG Grid page per PayPal endpoint
 scripts/seed-invoices.mjs                      Sample sandbox invoices
 proxy.ts                                       Access gate for hosted demos

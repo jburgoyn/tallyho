@@ -18,7 +18,7 @@ export type SavedReport = {
 
 export type StoredReports = { reports: SavedReport[]; activeId: string };
 
-const STORAGE_KEY = 'ag-paypal-demo:reports:v1';
+const STORAGE_KEY = 'tallyho:reports:v3';
 
 export const BUILT_IN_ID = 'paypal-overview';
 
@@ -32,7 +32,7 @@ const defaultPageTitles: Record<string, string> = {
 
 export const defaultReport = (): SavedReport => ({
   id: BUILT_IN_ID,
-  name: 'PayPal overview',
+  name: 'Cash flow',
   builtIn: true,
   pageTitles: defaultPageTitles,
   state: dashboardReport,

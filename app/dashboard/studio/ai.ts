@@ -10,14 +10,24 @@ import {
   directLlmRunner,
   type AgAiHarnessSetup,
   type AgAiPromptStarter,
+  type AgAiHarness,
   type AgAiTool,
   type AgBaseAiToolDisplay,
   type AgBuiltInAgentId,
   type AgStudioApi,
 } from 'ag-studio';
 import type { DashboardData } from '@/lib/dashboard-data';
-import { ACTION_LABEL, ACTION_TYPES, MAX_NOTE, MAX_SUBJECT, type ActionType } from '@/lib/actions';
+import {
+  ACTION_LABEL,
+  ACTION_TYPES,
+  EMAIL_ACTIONS,
+  MAX_NOTE,
+  MAX_SUBJECT,
+  PAYMENT_METHODS,
+  type ActionType,
+} from '@/lib/actions';
 import { propose } from '../actions-store';
+import { getFacts } from '../facts-store';
 import { ACTION_QUEUE_WIDGET } from './action-queue-widget';
 import { openaiAdapter } from './openai-adapter';
 
@@ -29,6 +39,8 @@ const CREATE_PAGE_TOOL = 'create_page';
 export type AiHost = {
   /** Add a page with this title, select it, and return its id. */
   createPage: (title: string) => string | undefined;
+  /** Show the AI Assistant panel, which Studio only has in edit mode. */
+  openAgent: () => void;
 };
 
 // The dashboard registers itself here once mounted; the agent's tools look it up when they run,
@@ -100,6 +112,7 @@ Which action:
 - remind: a sent invoice that is unpaid or partially paid.
 - send: a draft invoice that should have gone out.
 - cancel: only when the merchant asks for it, or an open invoice is clearly a duplicate. Explain why in the reason.
+- record_payment: when the merchant tells you a customer has paid outside PayPal (bank transfer, cheque, cash). Set paymentAmount to what they said was paid, or null for the full outstanding balance, and paymentMethod to how it arrived. Leave subject empty and use note for a short internal note, e.g. "Bank transfer received 9 Nov". Never record a payment the merchant has not told you about.
 
 Finish with a short summary: what you found, what you proposed, and what the merchant should look at first.`;
 
@@ -108,9 +121,30 @@ type InvoiceRow = DashboardData['invoices'][number];
 // Which invoices each action may be proposed for; anything else is rejected back to the model.
 const ALLOWED: Record<ActionType, (invoice: InvoiceRow) => string | undefined> = {
   remind: (i) => (i.isReceivable ? undefined : `is ${i.status.toLowerCase()}, so there is nothing to remind about`),
+  record_payment: (i) => (i.isReceivable ? undefined : `is ${i.status.toLowerCase()}, so it has no balance to pay off`),
   send: (i) => (i.statusGroup === 'Draft' ? undefined : `is ${i.status.toLowerCase()}, not a draft`),
   cancel: (i) => (i.isReceivable ? undefined : `is ${i.status.toLowerCase()}, so it cannot be cancelled`),
 };
+
+// The harness Studio is running, kept so that the dashboard's own widgets can start a conversation.
+let harness: AgAiHarness | undefined;
+
+/**
+ * Put a request to the cash-flow agent as if the merchant had typed it: opens the AI Assistant and
+ * starts a new conversation with the prompt. Used by the briefing widget's one-click actions.
+ * Resolves false when there is no agent to ask (no model key is configured).
+ */
+export async function askAgent(prompt: string): Promise<boolean> {
+  host?.openAgent();
+  // Studio builds the harness the first time its AI panel is shown, which openAgent has just asked for.
+  for (let waited = 0; !harness && waited < 4000; waited += 100) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (!harness) return false;
+  const session = await harness.createThread({ agentId: CASHFLOW_AGENT });
+  session.sendMessage(prompt);
+  return true;
+}
 
 function createPageTool(api: AgStudioApi): AgAiTool {
   return api.defineAiTool({
@@ -129,10 +163,7 @@ function createPageTool(api: AgStudioApi): AgAiTool {
   });
 }
 
-function proposeTool(api: AgStudioApi, data: DashboardData): AgAiTool {
-  const invoices = new Map(data.invoices.map((i) => [i.id, i]));
-  const customers = new Map(data.customers.map((c) => [c.id, c]));
-
+function proposeTool(api: AgStudioApi, initial: DashboardData): AgAiTool {
   return api.defineAiTool({
     name: PROPOSE_TOOL,
     description:
@@ -144,16 +175,31 @@ function proposeTool(api: AgStudioApi, data: DashboardData): AgAiTool {
         actions: s.array(
           s.object({
             type: s.enum(ACTION_TYPES, {
-              description: 'remind: unpaid sent invoice. send: draft invoice. cancel: open invoice to withdraw.',
+              description:
+                'remind: unpaid sent invoice. send: draft invoice. cancel: open invoice to withdraw. record_payment: customer paid outside PayPal.',
             }),
             invoiceId: s.string({ description: 'invoices.id of the invoice to act on.' }),
-            subject: s.string({ description: `Subject of the email PayPal sends the customer. Max ${MAX_SUBJECT} characters.` }),
-            note: s.string({ description: `Body of that email, written as the merchant. Max ${MAX_NOTE} characters.` }),
+            subject: s.string({
+              description: `Subject of the email PayPal sends the customer. Max ${MAX_SUBJECT} characters. Empty for record_payment.`,
+            }),
+            note: s.string({
+              description: `Body of that email, written as the merchant; for record_payment, a short internal note. Max ${MAX_NOTE} characters.`,
+            }),
+            paymentAmount: s.union([s.number(), s.null()], {
+              description: 'record_payment only: amount paid, in the invoice currency; null for the full outstanding balance. null for other types.',
+            }),
+            paymentMethod: s.union([s.enum(PAYMENT_METHODS), s.null()], {
+              description: 'record_payment only: how the payment arrived. null for other types.',
+            }),
             reason: s.string({ description: 'One short phrase for the merchant on why, e.g. "42 days overdue, second-largest balance".' }),
           }),
         ),
       }),
     execute: ({ actions }, ctx) => {
+      // The latest data, not what the page first loaded with: an approved action changes invoices.
+      const data = getFacts() ?? initial;
+      const invoices = new Map(data.invoices.map((i) => [i.id, i]));
+      const customers = new Map(data.customers.map((c) => [c.id, c]));
       const problems: string[] = [];
       const valid = actions.flatMap((action, index) => {
         const invoice = invoices.get(action.invoiceId);
@@ -167,12 +213,18 @@ function proposeTool(api: AgStudioApi, data: DashboardData): AgAiTool {
           problems.push(`${where}: invoice ${invoice.number} ${refusal}.`);
           return [];
         }
-        if (!action.subject.trim() || action.subject.length > MAX_SUBJECT) {
+        const emails = EMAIL_ACTIONS.has(action.type);
+        if (emails && (!action.subject.trim() || action.subject.length > MAX_SUBJECT)) {
           problems.push(`${where}: subject must be 1-${MAX_SUBJECT} characters.`);
           return [];
         }
-        if (!action.note.trim() || action.note.length > MAX_NOTE) {
+        if ((emails && !action.note.trim()) || action.note.length > MAX_NOTE) {
           problems.push(`${where}: note must be 1-${MAX_NOTE} characters.`);
+          return [];
+        }
+        const paid = action.paymentAmount ?? invoice.outstanding;
+        if (action.type === 'record_payment' && (paid <= 0 || paid > invoice.outstanding)) {
+          problems.push(`${where}: paymentAmount must be above 0 and at most the outstanding ${invoice.outstanding} ${invoice.currency}.`);
           return [];
         }
         // Everything the approver sees about the invoice comes from PayPal's data, not the model.
@@ -180,12 +232,16 @@ function proposeTool(api: AgStudioApi, data: DashboardData): AgAiTool {
           {
             type: action.type,
             invoiceId: invoice.id,
-            subject: action.subject.trim(),
+            subject: emails ? action.subject.trim() : '',
             note: action.note.trim(),
             reason: action.reason.trim(),
+            daysOverdue: invoice.daysOverdue,
+            ...(action.type === 'record_payment' && {
+              payment: { amount: paid, currency: invoice.currency, method: action.paymentMethod ?? ('OTHER' as const) },
+            }),
             invoiceNumber: invoice.number,
             customer: customers.get(invoice.customerId)?.name ?? invoice.customerId,
-            amount: action.type === 'send' ? invoice.total : invoice.outstanding,
+            amount: action.type === 'send' ? invoice.total : action.type === 'record_payment' ? paid : invoice.outstanding,
             currency: invoice.currency,
           },
         ];
@@ -213,7 +269,7 @@ export function buildAi(models: string[], data: DashboardData): AgAiHarnessSetup
     const proposeActions = proposeTool(api, data);
     const createPage = createPageTool(api);
 
-    return createAiHarness(api, ({ tools, builtIn }) => ({
+    harness = createAiHarness(api, ({ tools, builtIn }) => ({
       agents: [
         directLlmRunner({
           id: CASHFLOW_AGENT,
@@ -242,5 +298,6 @@ export function buildAi(models: string[], data: DashboardData): AgAiHarnessSetup
       promptStarters: PROMPT_STARTERS,
       models: models.length > 1 ? models.map((id) => ({ id, label: id })) : undefined,
     }));
+    return harness;
   };
 }

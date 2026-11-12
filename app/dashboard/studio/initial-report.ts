@@ -211,8 +211,9 @@ const receivables: AgPageState = {
         style: { theme: { common: { legend: { enabled: true } } } },
       },
     },
-    // The cash-flow agent's proposals, awaiting approval (./action-queue-widget.tsx).
-    // A custom widget type, outside the default registry this file is typed against.
+    // Custom widgets (./briefing-widget.tsx, ./action-queue-widget.tsx), outside the default registry
+    // this file is typed against. The briefing opens the page; the queue holds the agent's proposals.
+    briefing: { type: 'cash-briefing', dataMapping: {}, format: {} } as never,
     'action-queue': { type: 'action-queue', dataMapping: {}, format: {} } as never,
     'open-invoices': {
       type: 'grid',
@@ -234,14 +235,15 @@ const receivables: AgPageState = {
     },
   },
   widgetLayout: {
-    'kpi-outstanding': at(0, 0, 6, 7),
-    'kpi-overdue': at(6, 0, 6, 7),
-    'kpi-open': at(12, 0, 6, 7),
-    currency: at(18, 0, 6, 7),
-    aging: at(0, 7, 16, 18),
-    'overdue-share': at(16, 7, 8, 18),
-    'open-invoices': at(0, 25, 14, 24),
-    'action-queue': at(14, 25, 10, 24),
+    briefing: at(0, 0, 24, 13),
+    'open-invoices': at(0, 13, 14, 26),
+    'action-queue': at(14, 13, 10, 26),
+    'kpi-outstanding': at(0, 39, 6, 7),
+    'kpi-overdue': at(6, 39, 6, 7),
+    'kpi-open': at(12, 39, 6, 7),
+    currency: at(18, 39, 6, 7),
+    aging: at(0, 46, 16, 18),
+    'overdue-share': at(16, 46, 8, 18),
   },
   filter: {
     page: [
@@ -399,8 +401,8 @@ const catalogue: AgPageState = {
     'catalogue-sunburst': at(16, 27, 8, 24),
   },
 };
-// The report opens on its first page.
+// The report opens on Receivables: the briefing, the open invoices and the agent's queue.
 export const dashboardReport: AgReportState = {
-  selectedPageId: revenue.id,
-  pages: [revenue, receivables, cash, catalogue],
+  selectedPageId: receivables.id,
+  pages: [receivables, revenue, cash, catalogue],
 };

@@ -13,6 +13,8 @@ export type QueuedAction = ActionRequest & {
   customer: string;
   amount: number;
   currency: string;
+  /** Days past due when it was proposed; 0 when not overdue. Sets the tone badge on the card. */
+  daysOverdue: number;
   /** Why the agent proposed it. */
   reason: string;
   status: ActionStatus;
@@ -78,23 +80,33 @@ export const edit = (id: string, change: Pick<QueuedAction, 'subject' | 'note'>)
 export const dismiss = (id: string) => patch(id, { status: 'dismissed' });
 export const clearFinished = () => set(actions.filter((a) => a.status === 'proposed' || a.status === 'running'));
 
+// Called after each action PayPal accepts, so the dashboard can reload the data it changed.
+const completed = new Set<() => void>();
+export const onActionCompleted = (listener: () => void) => {
+  completed.add(listener);
+  return () => {
+    completed.delete(listener);
+  };
+};
+
 /** Carry out one approved action through the server, which calls PayPal. */
 export async function approve(id: string): Promise<void> {
   const action = actions.find((a) => a.id === id);
   if (!action || (action.status !== 'proposed' && action.status !== 'failed')) return;
   patch(id, { status: 'running', error: undefined });
   try {
-    const { type, invoiceId, subject, note } = action;
+    const { type, invoiceId, subject, note, payment } = action;
     const res = await fetch('/api/paypal/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, invoiceId, subject, note }),
+      body: JSON.stringify({ type, invoiceId, subject, note, payment }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
       throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
     }
     patch(id, { status: 'done' });
+    completed.forEach((listener) => listener());
   } catch (e) {
     patch(id, { status: 'failed', error: e instanceof Error ? e.message : String(e) });
   }

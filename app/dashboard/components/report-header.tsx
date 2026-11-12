@@ -66,11 +66,12 @@ export function ReportHeader({
         )}
         {editing ? (
           <Button variant="ghost" size="sm" onClick={() => onEditingChange(false)}>
-            <EyeIcon className="size-4" /> View
+            <EyeIcon className="size-4" /> Done
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => onEditingChange(true)}>
-            <EditIcon className="size-4" /> Edit
+          // Studio's AI Assistant lives in edit mode, so one button opens both.
+          <Button variant="primary" size="sm" onClick={() => onEditingChange(true)}>
+            <EditIcon className="size-4" /> Ask the agent
           </Button>
         )}
       </div>

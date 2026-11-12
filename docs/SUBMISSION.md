@@ -5,7 +5,7 @@ until you paste it in.
 
 ## Project name
 
-Cash-flow agent
+Tallyho
 
 ## Tagline
 
@@ -20,7 +20,7 @@ it, decide who to chase first, and write the email.
 
 ## What it does
 
-The cash-flow agent sits inside a PayPal dashboard. You ask it where your money is stuck. It queries
+Tallyho is a cash-flow agent that sits inside a PayPal dashboard. You ask it where your money is stuck. It queries
 your live invoices, ranks what is overdue, and drafts a reminder for each one in a tone that matches
 how late it is: a nudge at five days, a request for a payment date at thirty, a firm ask for a reply
 at sixty.
@@ -41,8 +41,11 @@ dashboard pages: ask for a collections view and it creates the page and fills it
   with Studio's query tools and delegates chart and layout work to Studio's lead agent.
 - **Custom tools:** `propose_invoice_actions` queues actions for approval, and `create_page` adds a
   page, which Studio's own agents cannot do because pages belong to the host app.
-- **Custom widget:** the approval queue is a custom AG Studio widget, so it lives on the dashboard
-  like any chart and the agent can place it on pages it builds.
+- **Custom widgets:** the approval queue and the briefing banner are custom AG Studio widgets, so
+  they live on the dashboard like any chart, the agent can place them on pages it builds, and the
+  briefing's buttons start the agent directly.
+- **Theming:** one set of design tokens drives the app shell, AG Studio and AG Grid, so the whole
+  product carries its own palette and typeface.
 - **Model:** OpenAI's Responses API, called through a server-side proxy so the key never reaches the
   browser.
 - **Stack:** Next.js, React, TypeScript, Tailwind. Started from PayPal's AG Grid hackathon boilerplate.
@@ -85,8 +88,10 @@ Responses API, Next.js, React, TypeScript, Tailwind CSS, Render
 
 - Hosted demo: `<URL>`. The browser will ask for a username and password: any username, password
   `<DEMO_PASSWORD>`.
-- Open **Dashboard**, click **Edit** (top right) to open the AI Assistant.
-- Click **Chase overdue invoices**. Watch the queue on the Receivables page fill, then approve one.
+- Open **Dashboard**. In the briefing at the top, click **Chase overdue invoices**. The AI Assistant
+  opens and the queue beside it fills; approve one.
+- Tell the agent a customer paid by bank transfer, approve the recorded payment, and watch the
+  overdue total drop.
 - Click **Build a collections page** to see the agent create a page and delegate the charts.
 - To run locally instead, follow the README.
 
@@ -103,7 +108,7 @@ Responses API, Next.js, React, TypeScript, Tailwind CSS, Render
 | 1:40 | Type "I have drafts that never went out" | "It handles other stuck money too: here, two invoices that were written and never sent." |
 | 2:00 | Click "Build a collections page"; new page appears | "It also builds its own dashboard. Our agent creates the page, then delegates the charts to AG Studio's built-in agents." |
 | 2:30 | Collections page with queue | "Under the hood: a custom agent and a custom widget in AG Studio's agent framework, PayPal's REST APIs, and a rule that the agent can only propose. A person approves every action." |
-| 2:50 | Title card with repo URL | "Cash-flow agent. Thanks for watching." |
+| 2:50 | Landing page, then repo URL | "Tallyho. Thanks for watching." |
 
 Reminders for the recording:
 
