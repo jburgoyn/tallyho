@@ -14,8 +14,6 @@ env:
     secret: paypal-client-id
   - variable: PAYPAL_SECRET
     secret: paypal-secret
-  - variable: AG_STUDIO
-    secret: ag-studio-licence
   - variable: AG_STUDIO_OPENAI_API_KEY
     secret: openai-api-key
   # Gates every page and API route behind HTTP Basic auth (see proxy.ts).
@@ -23,3 +21,5 @@ env:
     secret: demo-password
   - variable: OPENAI_MODELS
     value: gpt-5.6-terra,gpt-5.6-luna,gpt-5.6-sol
+  - variable: AG_STUDIO
+    secret: ag-studio-licence
