@@ -1,44 +1,31 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { GATE_COOKIE, gateToken, sameString } from '@/lib/demo-gate';
 
 // Access gate for a hosted demo. The app's API routes spend the owner's model key and act on their
 // PayPal sandbox, so a public deployment must not be open to everyone.
 //
-// Set DEMO_PASSWORD on the host and every page and API route asks for HTTP Basic credentials: any
-// username, and that password. Leave it unset (local development) and nothing is gated.
+// Set DEMO_PASSWORD on the host and every page and API route needs a sign-in: visitors are sent to
+// /login, and a correct password sets a cookie. Leave it unset (local development) and nothing is gated.
 
-const REALM = 'Basic realm="Cash-flow agent demo", charset="UTF-8"';
+const OPEN_PATHS = new Set(['/login', '/api/login']);
 
-// Compares every character whatever the input, so the time taken does not reveal a partial match.
-function sameString(a: string, b: string) {
-  let difference = a.length ^ b.length;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    difference |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  }
-  return difference === 0;
-}
-
-function passwordFrom(header: string | null): string | undefined {
-  if (!header?.startsWith('Basic ')) return undefined;
-  try {
-    const decoded = atob(header.slice(6));
-    const colon = decoded.indexOf(':');
-    return colon === -1 ? undefined : decoded.slice(colon + 1);
-  } catch {
-    return undefined;
-  }
-}
-
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const expected = process.env.DEMO_PASSWORD;
   if (!expected) return NextResponse.next();
 
-  const given = passwordFrom(request.headers.get('authorization'));
-  if (given !== undefined && sameString(given, expected)) return NextResponse.next();
+  const { pathname, search } = request.nextUrl;
+  if (OPEN_PATHS.has(pathname)) return NextResponse.next();
 
-  return new NextResponse('Authentication required.', {
-    status: 401,
-    headers: { 'WWW-Authenticate': REALM },
-  });
+  const cookie = request.cookies.get(GATE_COOKIE)?.value;
+  if (cookie && sameString(cookie, await gateToken(expected))) return NextResponse.next();
+
+  // API calls get a plain 401; pages are sent to the sign-in screen and come back afterwards.
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: { message: 'Sign in to the demo first.' } }, { status: 401 });
+  }
+  const login = new URL('/login', request.url);
+  if (pathname !== '/') login.searchParams.set('next', pathname + search);
+  return NextResponse.redirect(login);
 }
 
 export const config = {
